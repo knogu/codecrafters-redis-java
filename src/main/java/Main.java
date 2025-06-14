@@ -19,13 +19,19 @@ public class Main {
           serverSocket.setReuseAddress(true);
           // Wait for connection from client.
           clientSocket = serverSocket.accept();
+
+          while (true) {
+            byte[] input = new byte[1024];
+            clientSocket.getInputStream().read(input);
+            String inputString = new String(input).trim();
+            System.out.println("Received: " + inputString);
+            clientSocket.getOutputStream().write("+PONG\r\n".getBytes());
+          }
         } catch (IOException e) {
           System.out.println("IOException: " + e.getMessage());
         } finally {
           try {
             if (clientSocket != null) {
-              OutputStream outputStream = clientSocket.getOutputStream();
-              outputStream.write("+PONG\r\n".getBytes());
               clientSocket.close();
             }
           } catch (IOException e) {
