@@ -2,6 +2,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.TreeMap;
 
 import org.apache.commons.lang3.NotImplementedException;
@@ -80,7 +81,11 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             final String value = keyValues.get(key);
             return value == null ? new BulkString(null) : new SimpleString(value) ;
         } else if (bulkStringArr.getFirst().equals("info")) {
-            return new BulkString("role:" + (isMaster() ? "master" : "slave"));
+            StringJoiner joiner = new StringJoiner("\r\n");
+            joiner.add("role:" + (isMaster() ? "master" : "slave"));
+            joiner.add("master_replid:" + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"); // psuedo random
+            joiner.add("master_repl_offset:0"); // todo: fill correct value
+            return new BulkString(joiner.toString());
         }
         throw new NotImplementedException("parse failed");
     }
