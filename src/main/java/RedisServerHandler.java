@@ -22,7 +22,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         return Long.compare(expiry1, expiry2);
     });
 
-    private String handle(String req) {
+    private RespDataType handle(String req) {
         for (var key : keyValues.keySet()) {
             final var expiry = keyToExpiry.get(key);
             if (System.currentTimeMillis() < expiry) {
@@ -45,10 +45,11 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             String str = split[idx + 1];
             bulkStringArr.add(str);
         }
+
         if (bulkStringArr.getFirst().equals("ping")) {
-            return "PONG";
+            return new SimpleString("PONG");
         } else if (bulkStringArr.getFirst().equals("echo")) {
-            return bulkStringArr.get(1);
+            return new SimpleString(bulkStringArr.get(1));
         } else if (bulkStringArr.getFirst().equals("set")) {
             final String key = bulkStringArr.get(1);
             final String value = bulkStringArr.get(2);
@@ -63,10 +64,13 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             }
             keyToExpiry.put(key, expiry);
             keyValues.put(key, value);
-            return "OK";
+            return new SimpleString("OK");
         } else if (bulkStringArr.getFirst().equals("get")) {
             final String key = bulkStringArr.get(1);
-            return keyValues.get(key);
+            final String value = keyValues.get(key);
+            return value == null ? new BulkString(null) : new SimpleString(value) ;
+        } else if (bulkStringArr.getFirst().equals("info")) {
+            return new BulkString("role:master");
         }
         throw new NotImplementedException("parse failed");
     }
@@ -75,11 +79,8 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         ByteBuf in = (ByteBuf) msg;
         System.out.println("in: " + in.toString(CharsetUtil.UTF_8));
-        String res = handle(in.toString(CharsetUtil.UTF_8));
-        String finalStringRes = res == null ?
-                                "$-1\r\n" :
-                                "+" + res + "\r\n";
-        ByteBuf response = Unpooled.copiedBuffer(finalStringRes, CharsetUtil.UTF_8);
+        RespDataType res = handle(in.toString(CharsetUtil.UTF_8));
+        ByteBuf response = Unpooled.copiedBuffer(res.encode(), CharsetUtil.UTF_8);
         ctx.writeAndFlush(response);
     }
 
