@@ -1,5 +1,9 @@
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import javax.xml.crypto.dsig.keyinfo.KeyValue;
 
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -12,23 +16,34 @@ import io.netty.util.CharsetUtil;
 
 @Sharable
 public class RedisServerHandler extends ChannelInboundHandlerAdapter {
-    private static String handle(String req) {
+    private final Map<String, String> keyValues = new HashMap<>();
+
+    private String handle(String req) {
         req = req.toLowerCase();
         System.out.println(req);
-        var split = req.split("\r\n");
+        String[] split = req.split("\r\n");
         var arrLen = Integer.valueOf(split[0].substring(1));
         // handle only bulk string at this moment
-        var bulkStringArr = new ArrayList<>(List.of());
+        List<String> bulkStringArr = new ArrayList<>(List.of());
         for (int i = 0; i < arrLen; i++) {
             int idx = 1 + 2 * i;
             // assert only bulk string
             assert split[idx].charAt(0) == '$';
-            bulkStringArr.add(split[idx + 1]);
+            String str = split[idx + 1];
+            bulkStringArr.add(str);
         }
         if (bulkStringArr.getFirst().equals("ping")) {
             return "PONG";
         } else if (bulkStringArr.getFirst().equals("echo")) {
             return req.substring("*2\r\n$4\r\necho\r\n$1\r\n".length(), req.length() - 2);
+        } else if (bulkStringArr.getFirst().equals("set")) {
+            final String key = bulkStringArr.get(1);
+            final String value = bulkStringArr.get(2);
+            keyValues.put(key, value);
+            return "OK";
+        } else if (bulkStringArr.getFirst().equals("get")) {
+            final String key = bulkStringArr.get(1);
+            return keyValues.get(key);
         }
         throw new NotImplementedException("parse failed");
     }
@@ -37,7 +52,11 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         ByteBuf in = (ByteBuf) msg;
         System.out.println("in: " + in.toString(CharsetUtil.UTF_8));
-        ByteBuf response = Unpooled.copiedBuffer("+" + handle(in.toString(CharsetUtil.UTF_8)) + "\r\n", CharsetUtil.UTF_8);
+        String res = handle(in.toString(CharsetUtil.UTF_8));
+        String finalStringRes = res == null ?
+                                "$-1\r\n" :
+                                "+" + res + "\r\n";
+        ByteBuf response = Unpooled.copiedBuffer(finalStringRes, CharsetUtil.UTF_8);
         ctx.writeAndFlush(response);
     }
 
