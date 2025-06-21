@@ -35,7 +35,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         if (bulkStringArr.getFirst().equals("ping")) {
             return "PONG";
         } else if (bulkStringArr.getFirst().equals("echo")) {
-            return req.substring("*2\r\n$4\r\necho\r\n$1\r\n".length(), req.length() - 2);
+            return bulkStringArr.get(1);
         } else if (bulkStringArr.getFirst().equals("set")) {
             final String key = bulkStringArr.get(1);
             final String value = bulkStringArr.get(2);
