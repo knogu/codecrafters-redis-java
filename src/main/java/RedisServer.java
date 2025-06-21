@@ -1,5 +1,7 @@
 import java.net.InetSocketAddress;
 
+import org.apache.commons.lang3.StringUtils;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -10,13 +12,15 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 public class RedisServer {
     private final int port;
+    private final String masterAddr;
 
-    public RedisServer(int port) {
+    public RedisServer(int port, String masterAddr) {
         this.port = port;
+        this.masterAddr = masterAddr;
     }
 
     public void start() throws Exception {
-        final RedisServerHandler handler = new RedisServerHandler();
+        final RedisServerHandler handler = new RedisServerHandler(masterAddr);
         EventLoopGroup group = new NioEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap();

@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.apache.commons.lang3.NotImplementedException;
+import org.apache.commons.lang3.StringUtils;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -15,12 +16,21 @@ import io.netty.util.CharsetUtil;
 
 @Sharable
 public class RedisServerHandler extends ChannelInboundHandlerAdapter {
+    private final String masterAddr;
     private final Map<String, Long> keyToExpiry = new HashMap<>();
     private final Map<String, String> keyValues = new TreeMap<>((key1, key2) -> {
         var expiry1 = keyToExpiry.get(key1);
         var expiry2 = keyToExpiry.get(key2);
         return Long.compare(expiry1, expiry2);
     });
+
+    private boolean isMaster() {
+        return StringUtils.isEmpty(masterAddr);
+    }
+
+    public RedisServerHandler(String masterAddr) {
+        this.masterAddr = masterAddr;
+    }
 
     private RespDataType handle(String req) {
         for (var key : keyValues.keySet()) {
@@ -70,7 +80,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             final String value = keyValues.get(key);
             return value == null ? new BulkString(null) : new SimpleString(value) ;
         } else if (bulkStringArr.getFirst().equals("info")) {
-            return new BulkString("role:master");
+            return new BulkString("role:" + (isMaster() ? "master" : "slave"));
         }
         throw new NotImplementedException("parse failed");
     }
