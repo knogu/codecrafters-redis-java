@@ -1,3 +1,6 @@
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.commons.lang3.NotImplementedException;
 
 import io.netty.buffer.ByteBuf;
@@ -12,9 +15,19 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     private static String handle(String req) {
         req = req.toLowerCase();
         System.out.println(req);
-        if ("*1\r\n$4\r\nping\r\n".equals(req)) {
+        var split = req.split("\r\n");
+        var arrLen = Integer.valueOf(split[0].substring(1));
+        // handle only bulk string at this moment
+        var bulkStringArr = new ArrayList<>(List.of());
+        for (int i = 0; i < arrLen; i++) {
+            int idx = 1 + 2 * i;
+            // assert only bulk string
+            assert split[idx].charAt(0) == '$';
+            bulkStringArr.add(split[idx + 1]);
+        }
+        if (bulkStringArr.getFirst().equals("ping")) {
             return "PONG";
-        } else if (req.startsWith("*2\r\n$4\r\necho\r\n")) {
+        } else if (bulkStringArr.getFirst().equals("echo")) {
             return req.substring("*2\r\n$4\r\necho\r\n$1\r\n".length(), req.length() - 2);
         }
         throw new NotImplementedException("parse failed");
