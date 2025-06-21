@@ -2,8 +2,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import javax.xml.crypto.dsig.keyinfo.KeyValue;
+import java.util.TreeMap;
 
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -16,9 +15,23 @@ import io.netty.util.CharsetUtil;
 
 @Sharable
 public class RedisServerHandler extends ChannelInboundHandlerAdapter {
-    private final Map<String, String> keyValues = new HashMap<>();
+    private final Map<String, Long> keyToExpiry = new HashMap<>();
+    private final Map<String, String> keyValues = new TreeMap<>((key1, key2) -> {
+        var expiry1 = keyToExpiry.get(key1);
+        var expiry2 = keyToExpiry.get(key2);
+        return Long.compare(expiry1, expiry2);
+    });
 
     private String handle(String req) {
+        for (var key : keyValues.keySet()) {
+            final var expiry = keyToExpiry.get(key);
+            if (System.currentTimeMillis() < expiry) {
+                break;
+            }
+            keyValues.remove(key);
+            keyToExpiry.remove(key);
+        }
+
         req = req.toLowerCase();
         System.out.println(req);
         String[] split = req.split("\r\n");
@@ -39,6 +52,16 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         } else if (bulkStringArr.getFirst().equals("set")) {
             final String key = bulkStringArr.get(1);
             final String value = bulkStringArr.get(2);
+            System.out.println("size: " + bulkStringArr.size());
+            System.out.println("check: " + (4 <= bulkStringArr.size()));
+            long expiry;
+            if (4 <= bulkStringArr.size()) {
+                assert "ex".equals(bulkStringArr.get(3));
+                expiry = System.currentTimeMillis() + Long.parseLong(bulkStringArr.get(4));
+            } else {
+                expiry = Long.MAX_VALUE;
+            }
+            keyToExpiry.put(key, expiry);
             keyValues.put(key, value);
             return "OK";
         } else if (bulkStringArr.getFirst().equals("get")) {
