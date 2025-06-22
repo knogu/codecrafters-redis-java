@@ -1,10 +1,14 @@
 public class Main {
     public static void main(String[] args) throws Exception {
-        String masterServerAddr = "";
+        String masterHostname = "";
+        Integer masterPort = -1;
         int port = 6379;
         for (int i = 0; i < args.length; i++) {
             if (args[i].equalsIgnoreCase("--replicaof") && i + 1 < args.length) {
-                masterServerAddr = args[i+1];
+                String[] masterServerAddr = args[i + 1].split(" ");
+                assert masterServerAddr.length == 2;
+                masterHostname = masterServerAddr[0];
+                masterPort = Integer.valueOf(masterServerAddr[1]);
                 i++;
             }
             if (args[i].equalsIgnoreCase("--port") && i + 1 < args.length) {
@@ -12,6 +16,6 @@ public class Main {
                 i++;
             }
         }
-        new RedisServer(port, masterServerAddr).start();
+        new RedisServer(port, masterHostname, masterPort).start();
     }
 }

@@ -1,3 +1,5 @@
+import java.io.IOException;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,7 +19,8 @@ import io.netty.util.CharsetUtil;
 
 @Sharable
 public class RedisServerHandler extends ChannelInboundHandlerAdapter {
-    private final String masterAddr;
+    private final String masterHostname;
+    private final int masterPort;
     private final Map<String, Long> keyToExpiry = new HashMap<>();
     private final Map<String, String> keyValues = new TreeMap<>((key1, key2) -> {
         var expiry1 = keyToExpiry.get(key1);
@@ -26,11 +29,19 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     });
 
     private boolean isMaster() {
-        return StringUtils.isEmpty(masterAddr);
+        return StringUtils.isEmpty(masterHostname);
     }
 
-    public RedisServerHandler(String masterAddr) {
-        this.masterAddr = masterAddr;
+    public RedisServerHandler(String masterHostname, int masterPort) throws IOException {
+        this.masterHostname = masterHostname;
+        this.masterPort = masterPort;
+
+        if (!masterHostname.isEmpty()) {
+            Socket masterConn = new Socket(masterHostname, masterPort);
+            masterConn.getOutputStream().write("*1\r\n$4\r\nPING\r\n".getBytes());
+            masterConn.getOutputStream().flush();
+            masterConn.close();
+        }
     }
 
     private RespDataType handle(String req) {

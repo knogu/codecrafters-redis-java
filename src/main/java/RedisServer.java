@@ -12,15 +12,17 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 public class RedisServer {
     private final int port;
-    private final String masterAddr;
+    private final String masterHostname;
+    private final int masterPort;
 
-    public RedisServer(int port, String masterAddr) {
+    public RedisServer(int port, String masterHostname, int masterPort) {
         this.port = port;
-        this.masterAddr = masterAddr;
+        this.masterHostname = masterHostname;
+        this.masterPort = masterPort;
     }
 
     public void start() throws Exception {
-        final RedisServerHandler handler = new RedisServerHandler(masterAddr);
+        final RedisServerHandler handler = new RedisServerHandler(masterHostname, masterPort);
         EventLoopGroup group = new NioEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap();
