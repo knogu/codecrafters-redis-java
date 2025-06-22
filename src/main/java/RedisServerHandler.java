@@ -1,5 +1,9 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,14 +36,34 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         return StringUtils.isEmpty(masterHostname);
     }
 
-    public RedisServerHandler(String masterHostname, int masterPort) throws IOException {
+    public RedisServerHandler(int selfPort, String masterHostname, int masterPort)
+            throws IOException, InterruptedException {
         this.masterHostname = masterHostname;
         this.masterPort = masterPort;
 
         if (!masterHostname.isEmpty()) {
-            Socket masterConn = new Socket(masterHostname, masterPort);
-            masterConn.getOutputStream().write("*1\r\n$4\r\nPING\r\n".getBytes());
-            masterConn.getOutputStream().flush();
+            final Socket masterConn = new Socket(masterHostname, masterPort);
+            final OutputStream out = masterConn.getOutputStream();
+            final BufferedReader in = new BufferedReader(new InputStreamReader(masterConn.getInputStream(), StandardCharsets.UTF_8));
+            out.write("*1\r\n$4\r\nPING\r\n".getBytes());
+            out.flush();
+            assert in.readLine().contains("PONG");
+            final String sendListeningPort = String.format("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", selfPort);
+            out.write(sendListeningPort.getBytes());
+            out.flush();
+            while (true) {
+                if (in.readLine().contains("OK")) {
+                    break;
+                }
+            }
+            out.write("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n".getBytes());
+            out.flush();
+            while (true) {
+                if (in.readLine().contains("OK")) {
+                    break;
+                }
+            }
+
             masterConn.close();
         }
     }

@@ -22,7 +22,7 @@ public class RedisServer {
     }
 
     public void start() throws Exception {
-        final RedisServerHandler handler = new RedisServerHandler(masterHostname, masterPort);
+        final RedisServerHandler handler = new RedisServerHandler(port, masterHostname, masterPort);
         EventLoopGroup group = new NioEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap();
