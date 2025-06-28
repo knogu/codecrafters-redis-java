@@ -87,28 +87,28 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
 
         req = req.toLowerCase();
         System.out.println(req);
-        String[] split = req.split("\r\n");
-        var arrLen = Integer.valueOf(split[0].substring(1));
+        final String[] split = req.split("\r\n");
+        final var arrLen = Integer.parseInt(split[0].substring(1));
         // handle only bulk string at this moment
-        List<String> bulkStringArr = new ArrayList<>(List.of());
+        final List<String> bulkStringArr = new ArrayList<>(List.of());
         for (int i = 0; i < arrLen; i++) {
-            int idx = 1 + 2 * i;
+            final int idx = 1 + 2 * i;
             // assert only bulk string
             assert split[idx].charAt(0) == '$';
-            String str = split[idx + 1];
+            final String str = split[idx + 1];
             bulkStringArr.add(str);
         }
 
-        if (bulkStringArr.getFirst().equals("ping")) {
+        if ("ping".equals(bulkStringArr.getFirst())) {
             return new SimpleString("PONG");
-        } else if (bulkStringArr.getFirst().equals("echo")) {
+        } else if ("echo".equals(bulkStringArr.getFirst())) {
             return new SimpleString(bulkStringArr.get(1));
-        } else if (bulkStringArr.getFirst().equals("set")) {
+        } else if ("set".equals(bulkStringArr.getFirst())) {
             final String key = bulkStringArr.get(1);
             final String value = bulkStringArr.get(2);
             System.out.println("size: " + bulkStringArr.size());
             System.out.println("check: " + (4 <= bulkStringArr.size()));
-            long expiry;
+            final long expiry;
             if (4 <= bulkStringArr.size()) {
                 assert "ex".equals(bulkStringArr.get(3));
                 expiry = System.currentTimeMillis() + Long.parseLong(bulkStringArr.get(4));
@@ -118,17 +118,17 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             keyToExpiry.put(key, expiry);
             keyValues.put(key, value);
             return new SimpleString("OK");
-        } else if (bulkStringArr.getFirst().equals("get")) {
+        } else if ("get".equals(bulkStringArr.getFirst())) {
             final String key = bulkStringArr.get(1);
             final String value = keyValues.get(key);
             return value == null ? new BulkString(null) : new SimpleString(value) ;
-        } else if (bulkStringArr.getFirst().equals("info")) {
-            StringJoiner joiner = new StringJoiner("\r\n");
+        } else if ("info".equals(bulkStringArr.getFirst())) {
+            final StringJoiner joiner = new StringJoiner("\r\n");
             joiner.add("role:" + (isMaster() ? "master" : "slave"));
             joiner.add("master_replid:" + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"); // psuedo random
             joiner.add("master_repl_offset:0"); // todo: fill correct value
             return new BulkString(joiner.toString());
-        } else if (bulkStringArr.getFirst().equals("replconf")) {
+        } else if ("replconf".equals(bulkStringArr.getFirst())) {
             return new SimpleString("OK");
         }
         throw new NotImplementedException("parse failed");
@@ -136,10 +136,10 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        ByteBuf in = (ByteBuf) msg;
+        final ByteBuf in = (ByteBuf) msg;
         System.out.println("in: " + in.toString(CharsetUtil.UTF_8));
-        RespDataType res = handle(in.toString(CharsetUtil.UTF_8));
-        ByteBuf response = Unpooled.copiedBuffer(res.encode(), CharsetUtil.UTF_8);
+        final RespDataType res = handle(in.toString(CharsetUtil.UTF_8));
+        final ByteBuf response = Unpooled.copiedBuffer(res.encode(), CharsetUtil.UTF_8);
         ctx.writeAndFlush(response);
     }
 
