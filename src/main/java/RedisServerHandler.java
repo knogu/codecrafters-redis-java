@@ -16,6 +16,7 @@ import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -28,6 +29,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     private final int masterPort;
     private String replicaHostname;
     private int replicaPort;
+    private Channel replicaChannel;
     private final Map<String, Long> keyToExpiry = new HashMap<>();
     private final Map<String, String> keyValues = new TreeMap<>((key1, key2) -> {
         var expiry1 = keyToExpiry.get(key1);
@@ -104,14 +106,12 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         if ("ping".equals(bulkStringArr.getFirst())) {
-            return RespAndRepl.ofRepl(new SimpleString("PONG"));
+            return RespAndRepl.ofRespForRead(new SimpleString("PONG"));
         } else if ("echo".equals(bulkStringArr.getFirst())) {
-            return RespAndRepl.ofRepl(new SimpleString(bulkStringArr.get(1)));
+            return RespAndRepl.ofRespForRead(new SimpleString(bulkStringArr.get(1)));
         } else if ("set".equals(bulkStringArr.getFirst())) {
             final String key = bulkStringArr.get(1);
             final String value = bulkStringArr.get(2);
-            System.out.println("size: " + bulkStringArr.size());
-            System.out.println("check: " + (4 <= bulkStringArr.size()));
             final long expiry;
             if (4 <= bulkStringArr.size()) {
                 assert "ex".equals(bulkStringArr.get(3));
@@ -121,26 +121,27 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             }
             keyToExpiry.put(key, expiry);
             keyValues.put(key, value);
-            return RespAndRepl.ofRepl(new SimpleString("OK"));
+            return RespAndRepl.ofRespForWrite(new SimpleString("OK"));
         } else if ("get".equals(bulkStringArr.getFirst())) {
             final String key = bulkStringArr.get(1);
             final String value = keyValues.get(key);
-            return RespAndRepl.ofRepl(value == null ? new BulkString(null) : new SimpleString(value));
+            return RespAndRepl.ofRespForRead(value == null ? new BulkString(null) : new SimpleString(value));
         } else if ("info".equals(bulkStringArr.getFirst())) {
             final StringJoiner joiner = new StringJoiner("\r\n");
             joiner.add("role:" + (isMaster() ? "master" : "slave"));
             joiner.add("master_replid:" + replId); // psuedo random
             joiner.add("master_repl_offset:0"); // todo: fill correct value
-            return RespAndRepl.ofRepl(new BulkString(joiner.toString()));
+            return RespAndRepl.ofRespForRead(new BulkString(joiner.toString()));
         } else if ("replconf".equals(bulkStringArr.getFirst())) {
             if ("listening-port".equals(bulkStringArr.get(1))) {
                 final InetSocketAddress socketAddress = (InetSocketAddress) ctx.channel().remoteAddress();
                 replicaHostname = socketAddress.getAddress().getHostAddress();
                 replicaPort = Integer.valueOf(bulkStringArr.get(2));
+                replicaChannel = ctx.channel();
             }
-            return RespAndRepl.ofRepl(new SimpleString("OK"));
+            return RespAndRepl.ofRespForRead(new SimpleString("OK"));
         } else if ("psync".equals(bulkStringArr.getFirst())) {
-            return new RespAndRepl(new SimpleString("FULLRESYNC " + replId + " 0"), Rdb.ofEmpty());
+            return new RespAndRepl(new SimpleString("FULLRESYNC " + replId + " 0"), Rdb.ofEmpty(), false);
         }
         throw new NotImplementedException("parse failed");
     }
@@ -156,6 +157,12 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             // todo: change the destination
             final ByteBuf repl = res.repl.encode();
             ctx.write(repl);
+        } else if (res.isPropagatedToReplica) {
+//            final Socket replicaConn = new Socket(replicaHostname, replicaPort);
+//            final OutputStream replOut = replicaConn.getOutputStream();
+//            replOut.write(((ByteBuf) msg).array());
+            System.out.println("replica ctx to write: " + replicaChannel);
+            replicaChannel.writeAndFlush(msg);
         }
         ctx.flush();
     }
