@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -15,7 +16,6 @@ import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -26,6 +26,8 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     private final String replId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
     private final String masterHostname;
     private final int masterPort;
+    private String replicaHostname;
+    private int replicaPort;
     private final Map<String, Long> keyToExpiry = new HashMap<>();
     private final Map<String, String> keyValues = new TreeMap<>((key1, key2) -> {
         var expiry1 = keyToExpiry.get(key1);
@@ -77,7 +79,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private RespDataType handle(String req) {
+    private RespAndRepl handle(String req, ChannelHandlerContext ctx) {
         for (var key : keyValues.keySet()) {
             final var expiry = keyToExpiry.get(key);
             if (System.currentTimeMillis() < expiry) {
@@ -102,9 +104,9 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         if ("ping".equals(bulkStringArr.getFirst())) {
-            return new SimpleString("PONG");
+            return RespAndRepl.ofRepl(new SimpleString("PONG"));
         } else if ("echo".equals(bulkStringArr.getFirst())) {
-            return new SimpleString(bulkStringArr.get(1));
+            return RespAndRepl.ofRepl(new SimpleString(bulkStringArr.get(1)));
         } else if ("set".equals(bulkStringArr.getFirst())) {
             final String key = bulkStringArr.get(1);
             final String value = bulkStringArr.get(2);
@@ -119,32 +121,43 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             }
             keyToExpiry.put(key, expiry);
             keyValues.put(key, value);
-            return new SimpleString("OK");
+            return RespAndRepl.ofRepl(new SimpleString("OK"));
         } else if ("get".equals(bulkStringArr.getFirst())) {
             final String key = bulkStringArr.get(1);
             final String value = keyValues.get(key);
-            return value == null ? new BulkString(null) : new SimpleString(value) ;
+            return RespAndRepl.ofRepl(value == null ? new BulkString(null) : new SimpleString(value));
         } else if ("info".equals(bulkStringArr.getFirst())) {
             final StringJoiner joiner = new StringJoiner("\r\n");
             joiner.add("role:" + (isMaster() ? "master" : "slave"));
             joiner.add("master_replid:" + replId); // psuedo random
             joiner.add("master_repl_offset:0"); // todo: fill correct value
-            return new BulkString(joiner.toString());
+            return RespAndRepl.ofRepl(new BulkString(joiner.toString()));
         } else if ("replconf".equals(bulkStringArr.getFirst())) {
-            return new SimpleString("OK");
+            if ("listening-port".equals(bulkStringArr.get(1))) {
+                final InetSocketAddress socketAddress = (InetSocketAddress) ctx.channel().remoteAddress();
+                replicaHostname = socketAddress.getAddress().getHostAddress();
+                replicaPort = Integer.valueOf(bulkStringArr.get(2));
+            }
+            return RespAndRepl.ofRepl(new SimpleString("OK"));
         } else if ("psync".equals(bulkStringArr.getFirst())) {
-            return new SimpleString("+FULLRESYNC " + replId + " 0");
+            return new RespAndRepl(new SimpleString("FULLRESYNC " + replId + " 0"), Rdb.ofEmpty());
         }
         throw new NotImplementedException("parse failed");
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws IOException {
         final ByteBuf in = (ByteBuf) msg;
         System.out.println("in: " + in.toString(CharsetUtil.UTF_8));
-        final RespDataType res = handle(in.toString(CharsetUtil.UTF_8));
-        final ByteBuf response = Unpooled.copiedBuffer(res.encode(), CharsetUtil.UTF_8);
-        ctx.writeAndFlush(response);
+        final RespAndRepl res = handle(in.toString(CharsetUtil.UTF_8), ctx);
+        final ByteBuf response = res.resp.encode();
+        ctx.write(response);
+        if (res.repl != null) {
+            // todo: change the destination
+            final ByteBuf repl = res.repl.encode();
+            ctx.write(repl);
+        }
+        ctx.flush();
     }
 
     @Override

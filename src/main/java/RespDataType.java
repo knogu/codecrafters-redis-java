@@ -1,3 +1,5 @@
+import io.netty.buffer.ByteBuf;
+
 public interface RespDataType {
-    public String encode();
+    public ByteBuf encode();
 }
