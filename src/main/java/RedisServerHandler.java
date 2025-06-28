@@ -23,6 +23,7 @@ import io.netty.util.CharsetUtil;
 
 @Sharable
 public class RedisServerHandler extends ChannelInboundHandlerAdapter {
+    private final String replId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
     private final String masterHostname;
     private final int masterPort;
     private final Map<String, Long> keyToExpiry = new HashMap<>();
@@ -125,11 +126,13 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         } else if ("info".equals(bulkStringArr.getFirst())) {
             final StringJoiner joiner = new StringJoiner("\r\n");
             joiner.add("role:" + (isMaster() ? "master" : "slave"));
-            joiner.add("master_replid:" + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"); // psuedo random
+            joiner.add("master_replid:" + replId); // psuedo random
             joiner.add("master_repl_offset:0"); // todo: fill correct value
             return new BulkString(joiner.toString());
         } else if ("replconf".equals(bulkStringArr.getFirst())) {
             return new SimpleString("OK");
+        } else if ("psync".equals(bulkStringArr.getFirst())) {
+            return new SimpleString("+FULLRESYNC " + replId + " 0");
         }
         throw new NotImplementedException("parse failed");
     }
