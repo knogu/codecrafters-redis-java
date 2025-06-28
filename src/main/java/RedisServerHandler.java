@@ -128,6 +128,8 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             joiner.add("master_replid:" + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"); // psuedo random
             joiner.add("master_repl_offset:0"); // todo: fill correct value
             return new BulkString(joiner.toString());
+        } else if (bulkStringArr.getFirst().equals("replconf")) {
+            return new SimpleString("OK");
         }
         throw new NotImplementedException("parse failed");
     }
