@@ -1,3 +1,5 @@
+import resp.RespDataType;
+
 public class RespAndRepl {
     public final RespDataType resp;
     public final RespDataType repl;
